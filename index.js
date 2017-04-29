@@ -1,6 +1,9 @@
+require('dotenv').config()
+
 const sphero = require('sphero');
-const SPHERO_PORT = '/dev/tty.Sphero-PGP-AMP-SPP';
+const SPHERO_PORT = process.env.SPHERO_PORT;
 let orb = sphero(SPHERO_PORT);
+
 
 const express = require('express');
 const app = express();

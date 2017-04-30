@@ -1,5 +1,6 @@
 var socket = io(window.location.origin);
 var position = {};
+var mode = 'rotate';
 
 var scale = {};
 var rotation = {};

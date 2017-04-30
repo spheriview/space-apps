@@ -13,17 +13,21 @@ const io = require('socket.io')(server);
 server.listen(8080);
 app.use(express.static('public'));
 
+// https://sdk.sphero.com/community-apis/javascript-sdk/
 function setupSphero() {
   orb.setStabilization(0);
-  orb.streamAccelerometer();
-  orb.streamImuAngles();
-  orb.detectCollisions();
+  orb.streamAccelerometer(30);
+  orb.streamImuAngles(30);
+  orb.detectCollisions(30);
   isConnected = true;
 }
 
 function setupStreaming(socket) {
   orb.on('dataStreaming', function(data) {
     socket.emit('data', data);
+  });
+  orb.on('collision', function() {
+    socket.emit('collision');
   });
 }
 

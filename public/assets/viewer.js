@@ -1,7 +1,14 @@
+/**
+ * filePath parsing
+ */
 var filePath = Qs.parse(window.location.search.replace('?','')).file.split('/');
 filePath.splice(2, 0, 'master');
 var fileUrl = '//raw.githubusercontent.com/' + filePath.join('/')
 
+
+/**
+ * Three JS viewer code
+ */
 if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
 var container, stats;
 var camera, cameraTarget, scene, renderer;
@@ -88,6 +95,9 @@ function animate(timestamp) {
   stats.update();
 }
 
+/**
+ * Frame update code
+ */
 var start = null;
 var ratio = 0;
 var interps = null;
@@ -112,9 +122,10 @@ function makeSmoothUpdate(timestamp, previousStep, nextStep) {
 
   } else if (ratio < 1 && interps) {
 
-    ratio = (timestamp - start)/200;
+    ratio = (timestamp - start)/(1000/30);
 
-    update = {};
+    update = update || {};
+
     update.x = interps.x(ratio);
     update.y = interps.y(ratio);
     update.z = interps.z(ratio);
@@ -124,7 +135,7 @@ function makeSmoothUpdate(timestamp, previousStep, nextStep) {
     start = null;
     interps = null;
 
-    update = {};
+    update = update || {};
     update.x = nextStep.x;
     update.y = nextStep.y;
     update.z = nextStep.z;
@@ -134,14 +145,19 @@ function makeSmoothUpdate(timestamp, previousStep, nextStep) {
 }
 
 
+// camera and scene can be updated here.
 function render(timestamp) {
+  if (mode == 'rotate') {
+    var update = makeSmoothUpdate(timestamp, scene.rotation, rotation);
 
-  var update = makeSmoothUpdate(timestamp, scene.rotation, rotation);
+    if (update) {
+      scene.rotation.x = update.x;
+      scene.rotation.y = update.y;
+      scene.rotation.z = update.z;
+    }
+  } else if (mode == 'zoom') {
 
-  if (update) {
-    scene.rotation.x = update.x;
-    scene.rotation.y = update.y;
-    scene.rotation.z = update.z;
+
   }
 
   camera.lookAt( cameraTarget );

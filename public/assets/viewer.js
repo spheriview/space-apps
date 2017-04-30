@@ -1,64 +1,149 @@
+var filePath = Qs.parse(window.location.search.replace('?','')).file.split('/');
+filePath.splice(2, 0, 'master');
+var fileUrl = '//raw.githubusercontent.com/' + filePath.join('/')
+
 if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
-var stats;
-var camera, controls, scene, renderer;
+var container, stats;
+var camera, cameraTarget, scene, renderer;
 init();
-render(); // remove when using next line for animation loop (requestAnimationFrame)
-//animate();
+animate();
 function init() {
+  container = document.createElement( 'div' );
+  document.body.appendChild( container );
+  camera = new THREE.PerspectiveCamera( 35, window.innerWidth / window.innerHeight, 1, 15 );
+  camera.position.set( 3, 0.15, 3 );
+  cameraTarget = new THREE.Vector3( 0, -0.25, 0 );
   scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2( 0xcccccc, 0.002 );
-  renderer = new THREE.WebGLRenderer();
+  scene.fog = new THREE.Fog( 0xededed, 2, 15 );
+
+  // Ground
+  var plane = new THREE.Mesh(
+    new THREE.PlaneBufferGeometry( 40, 40 ),
+    new THREE.MeshPhongMaterial( { color: 0x999999, specular: 0x101010 } )
+  );
+  plane.rotation.x = - Math.PI/2;
+  plane.position.y = - 0.5;
+  scene.add( plane );
+  plane.receiveShadow = true;
+
+  var loader = new THREE.STLLoader();
+  var material = new THREE.MeshPhongMaterial( { color: 0x5588ff, specular: 0x111111, shininess: 200 } );
+  loader.load( fileUrl, function ( geometry ) {
+    geometry.computeVertexNormals();
+    var mesh = new THREE.Mesh( geometry, material );
+    mesh.position.set( 0.5, 0.2, 0 );
+    mesh.rotation.set( - Math.PI / 2, 0, 0);
+    mesh.scale.set( 0.3, 0.3, 0.3 );
+    // mesh.castShadow = true;
+    // mesh.receiveShadow = true;
+    scene.add( mesh );
+  } );
+  // Lights
+  scene.add( new THREE.HemisphereLight( 0x443333, 0x111122 ) );
+  light = new THREE.AmbientLight( 0x404040 ); // soft white light
+  scene.add( light );
+  addShadowedLight( 1, 1, 1, 0xcccccc, 1.35 );
+  addShadowedLight( 0.5, 1, -1, 0xffffff, 0.5 );
+  // renderer
+  renderer = new THREE.WebGLRenderer( { antialias: true } );
   renderer.setClearColor( scene.fog.color );
   renderer.setPixelRatio( window.devicePixelRatio );
   renderer.setSize( window.innerWidth, window.innerHeight );
-  var container = document.getElementById( 'container' );
+  renderer.gammaInput = true;
+  renderer.gammaOutput = true;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.renderReverseSided = false;
   container.appendChild( renderer.domElement );
-  camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 1, 1000 );
-  camera.position.z = 500;
-  controls = new THREE.OrbitControls( camera, renderer.domElement );
-  controls.addEventListener( 'change', render ); // remove when using animation loop
-  // enable animation loop when using damping or autorotation
-  //controls.enableDamping = true;
-  //controls.dampingFactor = 0.25;
-  controls.enableZoom = false;
-  // world
-  var geometry = new THREE.CylinderGeometry( 0, 10, 30, 4, 1 );
-  var material =  new THREE.MeshPhongMaterial( { color:0xffffff, shading: THREE.FlatShading } );
-  for ( var i = 0; i < 500; i ++ ) {
-    var mesh = new THREE.Mesh( geometry, material );
-    mesh.position.x = ( Math.random() - 0.5 ) * 1000;
-    mesh.position.y = ( Math.random() - 0.5 ) * 1000;
-    mesh.position.z = ( Math.random() - 0.5 ) * 1000;
-    mesh.updateMatrix();
-    mesh.matrixAutoUpdate = false;
-    scene.add( mesh );
-  }
-  // lights
-  light = new THREE.DirectionalLight( 0xffffff );
-  light.position.set( 1, 1, 1 );
-  scene.add( light );
-  light = new THREE.DirectionalLight( 0x002288 );
-  light.position.set( -1, -1, -1 );
-  scene.add( light );
-  light = new THREE.AmbientLight( 0x222222 );
-  scene.add( light );
-  //
+  // stats
   stats = new Stats();
   container.appendChild( stats.dom );
   //
   window.addEventListener( 'resize', onWindowResize, false );
+}
+function addShadowedLight( x, y, z, color, intensity ) {
+  var directionalLight = new THREE.DirectionalLight( color, intensity );
+  directionalLight.position.set( x, y, z );
+  scene.add( directionalLight );
+  directionalLight.castShadow = true;
+  var d = 1;
+  directionalLight.shadow.camera.left = -d;
+  directionalLight.shadow.camera.right = d;
+  directionalLight.shadow.camera.top = d;
+  directionalLight.shadow.camera.bottom = -d;
+  directionalLight.shadow.camera.near = 1;
+  directionalLight.shadow.camera.far = 4;
+  directionalLight.shadow.mapSize.width = 1024;
+  directionalLight.shadow.mapSize.height = 1024;
+  directionalLight.shadow.bias = -0.005;
 }
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize( window.innerWidth, window.innerHeight );
 }
-function animate() {
+
+function animate(timestamp) {
   requestAnimationFrame( animate );
-  controls.update(); // required if controls.enableDamping = true, or if controls.autoRotate = true
+  render(timestamp);
   stats.update();
-  render();
 }
-function render( controlEvent ) {
+
+var start = null;
+var ratio = 0;
+var interps = null;
+
+function makeSmoothUpdate(timestamp, previousStep, nextStep) {
+  var update = null;
+
+  if (_.isEmpty(nextStep)) {
+    return;
+  }
+
+  if (justUpdated) {
+    start = timestamp;
+    justUpdated = false;
+    ratio = 0;
+
+    interps = {
+      x: d3.interpolateNumber(previousStep.x, nextStep.x),
+      y: d3.interpolateNumber(previousStep.y, nextStep.y),
+      z: d3.interpolateNumber(previousStep.z, nextStep.z)
+    };
+
+  } else if (ratio < 1 && interps) {
+
+    ratio = (timestamp - start)/200;
+
+    update = {};
+    update.x = interps.x(ratio);
+    update.y = interps.y(ratio);
+    update.z = interps.z(ratio);
+
+  } else {
+
+    start = null;
+    interps = null;
+
+    update = {};
+    update.x = nextStep.x;
+    update.y = nextStep.y;
+    update.z = nextStep.z;
+  }
+
+  return update;
+}
+
+
+function render(timestamp) {
+
+  var update = makeSmoothUpdate(timestamp, scene.rotation, rotation);
+
+  if (update) {
+    scene.rotation.x = update.x;
+    scene.rotation.y = update.y;
+    scene.rotation.z = update.z;
+  }
+
+  camera.lookAt( cameraTarget );
   renderer.render( scene, camera );
 }
